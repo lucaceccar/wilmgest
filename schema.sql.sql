@@ -1,0 +1,229 @@
+-- ============================================================
+-- Gestionale Collaboratrice Domestica
+-- Schema database MySQL 8
+-- File: sql/schema.sql
+-- ============================================================
+
+SET NAMES utf8mb4;
+SET FOREIGN_KEY_CHECKS = 0;
+
+-- ------------------------------------------------------------
+-- UTENTI (accesso al gestionale)
+-- ------------------------------------------------------------
+CREATE TABLE utenti (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  username VARCHAR(50) NOT NULL UNIQUE,
+  password_hash VARCHAR(255) NOT NULL,
+  email VARCHAR(150) DEFAULT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ------------------------------------------------------------
+-- COLLABORATORI
+-- ------------------------------------------------------------
+CREATE TABLE collaboratori (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  nome VARCHAR(100) NOT NULL,
+  cognome VARCHAR(100) NOT NULL,
+  codice_fiscale VARCHAR(16) NOT NULL UNIQUE,
+  data_assunzione DATE NOT NULL,
+  data_nascita DATE DEFAULT NULL,
+  luogo_nascita VARCHAR(150) DEFAULT NULL,
+  indirizzo VARCHAR(255) DEFAULT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ------------------------------------------------------------
+-- TIPOLOGIE ORE (lookup, valori fissi)
+-- ------------------------------------------------------------
+CREATE TABLE tipologie_ore (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  codice VARCHAR(30) NOT NULL UNIQUE,
+  descrizione VARCHAR(100) NOT NULL,
+  retribuita TINYINT(1) NOT NULL DEFAULT 0,
+  scala_ferie TINYINT(1) NOT NULL DEFAULT 0
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+INSERT INTO tipologie_ore (codice, descrizione, retribuita, scala_ferie) VALUES
+  ('LAVORATE',    'Ore lavorate',            1, 0),
+  ('PERMESSO_NR', 'Permesso non retribuito', 0, 0),
+  ('FERIE',       'Ferie',                   1, 1),
+  ('FESTIVITA',   'Festività retribuita',    1, 0);
+
+-- ------------------------------------------------------------
+-- REGISTRAZIONE ORE
+-- ------------------------------------------------------------
+CREATE TABLE registrazioni_ore (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  collaboratore_id INT NOT NULL,
+  data DATE NOT NULL,
+  tipologia_ore_id INT NOT NULL,
+  ore DECIMAL(5,2) NOT NULL,
+  note VARCHAR(255) DEFAULT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_reg_ore (collaboratore_id, data, tipologia_ore_id),
+  CONSTRAINT fk_reg_ore_collab FOREIGN KEY (collaboratore_id)
+    REFERENCES collaboratori(id),
+  CONSTRAINT fk_reg_ore_tipo FOREIGN KEY (tipologia_ore_id)
+    REFERENCES tipologie_ore(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ------------------------------------------------------------
+-- RETRIBUZIONI ORDINARIE (storico con validità)
+-- ------------------------------------------------------------
+CREATE TABLE retribuzioni_ordinarie (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  collaboratore_id INT NOT NULL,
+  importo_ora DECIMAL(10,2) NOT NULL,
+  data_inizio_validita DATE NOT NULL,
+  data_fine_validita DATE DEFAULT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_retrib_ord_collab FOREIGN KEY (collaboratore_id)
+    REFERENCES collaboratori(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ------------------------------------------------------------
+-- RETRIBUZIONI FESTIVITÀ (storico con validità)
+-- ------------------------------------------------------------
+CREATE TABLE retribuzioni_festivita (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  collaboratore_id INT NOT NULL,
+  importo_ora DECIMAL(10,2) NOT NULL,
+  data_inizio_validita DATE NOT NULL,
+  data_fine_validita DATE DEFAULT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_retrib_fest_collab FOREIGN KEY (collaboratore_id)
+    REFERENCES collaboratori(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ------------------------------------------------------------
+-- CONTRIBUTI (storico con validità, tipo DATORE / LAVORATORE)
+-- ------------------------------------------------------------
+CREATE TABLE contributi (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  collaboratore_id INT NOT NULL,
+  tipo ENUM('DATORE','LAVORATORE') NOT NULL,
+  importo_ora DECIMAL(10,2) NOT NULL,
+  data_inizio_validita DATE NOT NULL,
+  data_fine_validita DATE DEFAULT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_contrib_collab FOREIGN KEY (collaboratore_id)
+    REFERENCES collaboratori(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ------------------------------------------------------------
+-- PERIODI CONTRIBUTIVI (trimestri configurabili)
+-- ------------------------------------------------------------
+CREATE TABLE periodi_contributivi (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  collaboratore_id INT NOT NULL,
+  trimestre TINYINT NOT NULL,
+  anno SMALLINT NOT NULL,
+  data_inizio DATE NOT NULL,
+  data_fine DATE NOT NULL,
+  UNIQUE KEY uq_periodo (collaboratore_id, trimestre, anno),
+  CONSTRAINT fk_periodo_collab FOREIGN KEY (collaboratore_id)
+    REFERENCES collaboratori(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ------------------------------------------------------------
+-- MONTE FERIE (con riporto manuale)
+-- ore_residue = ore_disponibili + ore_riporto − ferie godute
+-- ------------------------------------------------------------
+CREATE TABLE monte_ferie (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  collaboratore_id INT NOT NULL,
+  ore_disponibili DECIMAL(6,2) NOT NULL DEFAULT 0.00,
+  ore_riporto DECIMAL(6,2) NOT NULL DEFAULT 0.00,
+  ore_residue DECIMAL(6,2) NOT NULL DEFAULT 0.00,
+  data_inizio_validita DATE NOT NULL,
+  data_fine_validita DATE NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_monte_collab FOREIGN KEY (collaboratore_id)
+    REFERENCES collaboratori(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ------------------------------------------------------------
+-- BUSTE PAGA (archivio)
+-- ------------------------------------------------------------
+CREATE TABLE buste_paga (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  collaboratore_id INT NOT NULL,
+  numero VARCHAR(20) NOT NULL UNIQUE,
+  data_emissione DATE NOT NULL,
+  data_inizio_periodo DATE NOT NULL,
+  data_fine_periodo DATE NOT NULL,
+  totale_ore_lavorate DECIMAL(6,2) NOT NULL DEFAULT 0.00,
+  totale_ore_ferie DECIMAL(6,2) NOT NULL DEFAULT 0.00,
+  totale_ore_festivita DECIMAL(6,2) NOT NULL DEFAULT 0.00,
+  totale_ore_permesso DECIMAL(6,2) NOT NULL DEFAULT 0.00,
+  importo_lavorate DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+  importo_ferie DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+  importo_festivita DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+  importo_righe_manuali DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+  totale_lordo_a DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+  contributi_lavoratore_b DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+  contributi_datore DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+  totale_netto_c DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_busta_collab FOREIGN KEY (collaboratore_id)
+    REFERENCES collaboratori(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ------------------------------------------------------------
+-- DETTAGLIO RIGHE ORE INCLUSE IN BUSTA PAGA (snapshot)
+-- ------------------------------------------------------------
+CREATE TABLE busta_paga_righe (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  busta_paga_id INT NOT NULL,
+  registrazione_ore_id INT NOT NULL,
+  data DATE NOT NULL,
+  tipologia_ore_id INT NOT NULL,
+  ore DECIMAL(5,2) NOT NULL,
+  importo_ora DECIMAL(10,2) NOT NULL,
+  importo_totale DECIMAL(10,2) NOT NULL,
+  contributo_lavoratore_ora DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+  contributo_datore_ora DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+  CONSTRAINT fk_bpr_busta FOREIGN KEY (busta_paga_id)
+    REFERENCES buste_paga(id) ON DELETE CASCADE,
+  CONSTRAINT fk_bpr_reg FOREIGN KEY (registrazione_ore_id)
+    REFERENCES registrazioni_ore(id),
+  CONSTRAINT fk_bpr_tipo FOREIGN KEY (tipologia_ore_id)
+    REFERENCES tipologie_ore(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ------------------------------------------------------------
+-- RIGHE AGGIUNTIVE MANUALI IN BUSTA PAGA
+-- (bonus, rimborsi, trattenute: importo positivo o negativo)
+-- ------------------------------------------------------------
+CREATE TABLE busta_paga_righe_manuali (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  busta_paga_id INT NOT NULL,
+  descrizione VARCHAR(255) NOT NULL,
+  importo DECIMAL(10,2) NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_bprm_busta FOREIGN KEY (busta_paga_id)
+    REFERENCES buste_paga(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ------------------------------------------------------------
+-- REPORT CONTRIBUTI (archivio)
+-- ------------------------------------------------------------
+CREATE TABLE report_contributi (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  collaboratore_id INT NOT NULL,
+  numero VARCHAR(20) NOT NULL UNIQUE,
+  trimestre TINYINT NOT NULL,
+  anno SMALLINT NOT NULL,
+  data_inizio DATE NOT NULL,
+  data_fine DATE NOT NULL,
+  totale_ore_periodo DECIMAL(8,2) NOT NULL DEFAULT 0.00,
+  contributi_datore DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+  contributi_lavoratore DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+  data_generazione DATE NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_report_collab FOREIGN KEY (collaboratore_id)
+    REFERENCES collaboratori(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+SET FOREIGN_KEY_CHECKS = 1;
