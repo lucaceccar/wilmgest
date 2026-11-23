@@ -1,0 +1,14 @@
+{
+    "name": "tuo-username/gestionale-collaboratrice",
+    "description": "Gestionale per ore lavorate, busta paga e contributi di una collaboratrice domestica",
+    "type": "project",
+    "require": {
+        "php": ">=8.0",
+        "dompdf/dompdf": "^2.0"
+    },
+    "autoload": {
+        "files": [
+            "includes/funzioni_calcolo.php"
+        ]
+    }
+}
