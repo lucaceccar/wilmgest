@@ -6,6 +6,11 @@
  * $tabella: 'retribuzioni_ordinarie' | 'retribuzioni_festivita' | 'contributi'
  * Per 'contributi' va passato $tipo = 'DATORE' | 'LAVORATORE'.
  */
+/**
+ * Restituisce la tariffa valida a una certa data da una tabella storica.
+ * $tabella: 'retribuzioni_ordinarie' | 'retribuzioni_festivita' | 'contributi'
+ * Per 'contributi' va passato $tipo = 'DATORE' | 'LAVORATORE'.
+ */
 function get_tariffa_valida(
     PDO $pdo,
     string $tabella,
@@ -13,11 +18,17 @@ function get_tariffa_valida(
     string $data,
     ?string $tipo = null
 ): float {
+    // NOTA: con EMULATE_PREPARES = false, MySQL non permette di riusare
+    // lo stesso placeholder più volte. Uso :data_inizio e :data_fine distinti.
     $sql = "SELECT importo_ora FROM $tabella
             WHERE collaboratore_id = :cid
-              AND data_inizio_validita <= :data
-              AND (data_fine_validita IS NULL OR data_fine_validita >= :data)";
-    $params = [':cid' => $collaboratoreId, ':data' => $data];
+              AND data_inizio_validita <= :data_inizio
+              AND (data_fine_validita IS NULL OR data_fine_validita >= :data_fine)";
+    $params = [
+        ':cid' => $collaboratoreId,
+        ':data_inizio' => $data,
+        ':data_fine' => $data,
+    ];
 
     if ($tabella === 'contributi' && $tipo !== null) {
         $sql .= " AND tipo = :tipo";
@@ -31,7 +42,6 @@ function get_tariffa_valida(
     $row = $stmt->fetch();
     return $row ? (float) $row['importo_ora'] : 0.0;
 }
-
 /**
  * Calcola l'anteprima di una busta paga per un collaboratore e un periodo.
  */
