@@ -5,10 +5,6 @@
     "require": {
         "php": ">=8.0",
         "dompdf/dompdf": "^2.0"
-    },
-    "autoload": {
-        "files": [
-            "includes/funzioni_calcolo.php"
-        ]
     }
+   
 }
